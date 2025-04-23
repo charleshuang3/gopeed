@@ -4,14 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/GopeedLab/gopeed/internal/controller"
-	"github.com/GopeedLab/gopeed/internal/fetcher"
-	"github.com/GopeedLab/gopeed/pkg/base"
-	"github.com/GopeedLab/gopeed/pkg/protocol/bt"
-	"github.com/GopeedLab/gopeed/pkg/util"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +13,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/GopeedLab/gopeed/internal/controller"
+	"github.com/GopeedLab/gopeed/internal/fetcher"
+	"github.com/GopeedLab/gopeed/pkg/base"
+	"github.com/GopeedLab/gopeed/pkg/protocol/bt"
+	"github.com/GopeedLab/gopeed/pkg/util"
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/charleshuang3/camouflagetorrentclients"
+	"github.com/charleshuang3/camouflagetorrentclients/transmission"
 )
 
 var (
@@ -59,6 +63,13 @@ func (f *Fetcher) Setup(ctl *controller.Controller) {
 	return
 }
 
+type AnnounceLog struct{}
+
+func (a *AnnounceLog) ChangeHttpRequest(req *http.Request) error {
+	fmt.Printf("[%s] %s\n", req.Method, req.URL.String())
+	return nil
+}
+
 func (f *Fetcher) initClient() (err error) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -87,6 +98,12 @@ func (f *Fetcher) initClient() (err error) {
 	})
 	dnsResolver := &DnsCacheResolver{RefreshTimeout: 5 * time.Minute}
 	cfg.TrackerDialContext = dnsResolver.DialContext
+
+	d := camouflagetorrentclients.NewDirectors(
+		transmission.New(),
+		&AnnounceLog{})
+	cfg.HttpRequestDirector = d.ChangeHttpRequest
+
 	client, err = torrent.NewClient(cfg)
 	if err != nil {
 		return
